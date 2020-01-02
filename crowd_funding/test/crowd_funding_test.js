@@ -72,4 +72,64 @@ contract('CrowdFundingWithDeadline Tests', accounts => {
       expect(e.message).to.include(ERR_MSG);
     }
   });
+
+  it('Crowdfunding succeeded', async () => {
+    await contract.contribute({
+      value: ONE_ETH,
+      from: contractCreator
+    });
+    await contract.setTime(601);
+    await contract.finishCrowdFunding();
+    let state = await contract.state.call();
+
+    expect(Number(state.valueOf())).to.equal(SUCCEEDED_STATE);
+  });
+
+  it('Crowdfunding failed', async () => {
+    await contract.contribute({
+      value: ONE_ETH / 2,
+      from: contractCreator
+    });
+    await contract.setTime(601);
+    await contract.finishCrowdFunding();
+    let state = await contract.state.call();
+
+    expect(Number(state.valueOf())).to.equal(FAILED_STATE);
+  });
+
+  it('collect money and paid out', async () => {
+    await contract.contribute({
+      value: ONE_ETH,
+      from: contractCreator
+    });
+    await contract.setTime(601);
+    await contract.finishCrowdFunding();
+
+    let initAmount = await web3.eth.getBalance(beneficiary);
+    await contract.collect({ from: contractCreator });
+
+    let newBalance = await web3.eth.getBalance(beneficiary);
+
+    // Beneficiary amount should be incremented in network by ONE_ETH
+    expect(newBalance - initAmount).to.equal(ONE_ETH);
+
+    let fundingState = await contract.state.call();
+    // Contract's state must be PAID_OUT
+    expect(Number(fundingState.valueOf())).to.equal(PAIDOUT_STATE);
+  });
+
+  it('withdraw funds from the contract', async () => {
+    await contract.contribute({
+      value: ONE_ETH - 100,
+      from: contractCreator
+    });
+    await contract.setTime(601);
+    await contract.finishCrowdFunding();
+
+    await contract.withdraw({ from: contractCreator });
+    let conAmountAfterWithdraw = await contract.amounts.call(contractCreator);
+
+    // amount of sender must be in zero
+    expect(Number(conAmountAfterWithdraw)).to.equals(0);
+  });
 });
