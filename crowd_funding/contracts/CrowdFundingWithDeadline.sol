@@ -3,6 +3,12 @@ pragma solidity ^0.4.25;
 contract CrowdFundingWithDeadline {
   
   enum State { Ongoing, Failed, Succeeded, PaidOut }
+
+  event CampaignFinished(
+    address addr,
+    uint totalCollected,
+    bool succeeded
+  );
   
   string public name;
   uint public targetAmount;
@@ -12,6 +18,7 @@ contract CrowdFundingWithDeadline {
   mapping(address => uint) public amounts;
   bool public collected;
   uint public totalCollected;
+  address owner;
 
   modifier inState(State expectedState) {
     require(state == expectedState, "Invalid state");
@@ -39,6 +46,7 @@ contract CrowdFundingWithDeadline {
         fundingDeadline = currentTime() + durationInMin * 1 minutes;
         beneficiary = beneficiaryAddress;
         state = State.Ongoing;
+        owner = msg.sender;
     }
 
     function contribute() public payable inState(State.Ongoing) beforeDead("No contributions after deadline!") {
@@ -56,6 +64,8 @@ contract CrowdFundingWithDeadline {
       } else {
         state = State.Succeeded;
       }
+
+      emit CampaignFinished(this, totalCollected, collected);
     }
 
     function collect() public inState(State.Succeeded) {
@@ -78,5 +88,10 @@ contract CrowdFundingWithDeadline {
     
     function currentTime() internal view returns(uint) {
         return now;
+    }
+
+    function kill() external {
+        require(msg.sender == owner, "Only the owner can kill this contract");
+        selfdestruct(owner);
     }
 }

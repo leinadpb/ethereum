@@ -4,8 +4,8 @@ let CrowdFundingWithDeadline = artifacts.require(
 
 contract('CrowdFundingWithDeadline Tests', accounts => {
   let contract;
-  let contractCreator = accounts[0];
-  let beneficiary = accounts[1];
+  let contractCreator = accounts[1];
+  let beneficiary = accounts[2];
 
   const ONE_ETH = 1000000000000000000; // Required amount in weis for contract
   const FUND_NAME = 'Funding LEINAD'; // Campaing name
@@ -25,6 +25,10 @@ contract('CrowdFundingWithDeadline Tests', accounts => {
         gas: 2000000
       }
     );
+  });
+
+  afterEach(async () => {
+    await contract.kill({ from: contractCreator });
   });
 
   it('contract is initialized', async () => {
@@ -131,5 +135,18 @@ contract('CrowdFundingWithDeadline Tests', accounts => {
 
     // amount of sender must be in zero
     expect(Number(conAmountAfterWithdraw)).to.equals(0);
+  });
+
+  it('event emitted on campaign finishing', async () => {
+    const options = { fromBlock: 0, toBlock: 'latest' };
+
+    await contract.setTime(601);
+    await contract.finishCrowdFunding(); // This functions emits an event  " CampaignFinished "
+
+    const allEvents = await contract.getPastEvents('CampaignFinished', options);
+    const finishedEvent = allEvents.find(e => e.event === 'CampaignFinished');
+
+    expect(Number(finishedEvent.args.totalCollected)).to.equal(0);
+    expect(finishedEvent.args.succeeded).to.equal(false);
   });
 });
