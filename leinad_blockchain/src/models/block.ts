@@ -76,12 +76,12 @@ class Block {
 
     // Is this a valid block and transaction
     let newBlockHash: string = await this.calculateBlockHash(prevBlockHash);
-    console.log('------');
-    console.log('PASSED PREV HASH ON ISVALID: ', prevBlockHash);
-    console.log('BLOCK PREV HASH ON ISVALID: ', this.previousBlockHash);
-    console.log('NEW HASH ON ISVALID: ', newBlockHash);
-    console.log('CURRENT HASH ON ISVALID: ', this.getBlockHash());
-    console.log('MERKLE TREE ROOT HASH: ', this.merkleTree.getRoot());
+    // console.log('------');
+    // console.log('PASSED PREV HASH ON ISVALID: ', prevBlockHash);
+    // console.log('BLOCK PREV HASH ON ISVALID: ', this.previousBlockHash);
+    // console.log('NEW HASH ON ISVALID: ', newBlockHash);
+    // console.log('CURRENT HASH ON ISVALID: ', this.getBlockHash());
+    // console.log('MERKLE TREE ROOT HASH: ', this.merkleTree.getRoot());
     if (newBlockHash !== this.getBlockHash()) {
       isValid = false;
     } else {
