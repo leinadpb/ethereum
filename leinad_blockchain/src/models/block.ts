@@ -1,14 +1,10 @@
-import ClaimType from './claim_type';
-import CryptoJS from 'crypto-js';
+import Hashing from '../helpers/Hashing';
+import Transaction from './Transaction';
+import MerkleTreeWrapper from '../common/merkle_tree/MerkleTree';
 
 class Block {
-  // Transaction details
-  private claimNumber: string;
-  private settlementAmount: number;
-  private settlementDate: Date;
-  private carRegistration: string;
-  private mileage: number;
-  private claimType: ClaimType;
+  // Transactions of this block
+  private transactions: Transaction[];
 
   // Block details
   private blockNumber: number;
@@ -16,85 +12,76 @@ class Block {
   private blockHash?: string;
   private previousBlockHash?: string;
   private nextBlock?: Block;
+  private merkleTree: MerkleTreeWrapper;
 
   // internals
   private parent?: Block;
 
-  constructor(
-    blockNumber: number,
-    claimNumber: string,
-    settlementAmount: number,
-    settlementDate: Date,
-    carRegistration: string,
-    mileage: number,
-    claimType: ClaimType,
-    parent: Block | undefined
-  ) {
+  constructor(blockNumber: number) {
     this.blockNumber = blockNumber;
-    this.claimNumber = claimNumber;
-    this.settlementAmount = settlementAmount;
-    this.settlementDate = settlementDate;
-    this.carRegistration = carRegistration;
-    this.mileage = mileage;
-    this.claimType = claimType;
     this.createdDate = new Date();
-    this.parent = parent;
+    this.transactions = [];
+    this.merkleTree = new MerkleTreeWrapper();
   }
 
   // Instance methods
+  public addTransaction(trans: Transaction) {
+    this.transactions.push(trans);
+  }
   public async initializeBlock() {
     await this.setCurrentBlockHash(this.parent);
   }
   public async calculateBlockHash(prevBlockHash: string | undefined): Promise<string> {
-    let txHash: string =
-      this.claimNumber + this.settlementAmount.toString() + this.settlementDate.toUTCString() + this.carRegistration + this.mileage.toString() + this.claimType.getString();
     let blockHeader: string = this.blockNumber.toString() + this.createdDate.toUTCString() + (prevBlockHash !== undefined ? prevBlockHash : '');
-    let combined: string = txHash + blockHeader;
-
+    let combined: string = this.merkleTree.getRoot() + blockHeader;
     // Hash combined value and return it as base64 string
-    let digest = await CryptoJS.SHA256(combined);
-
-    // console.log('To calculate hash ------->');
-    // console.log('     claimNumber: ', this.claimNumber);
-    // console.log('     settlementAmount: ', this.settlementAmount.toString());
-    // console.log('     settlementDate: ', this.settlementDate.toUTCString());
-    // console.log('     carRegistration: ', this.carRegistration);
-    // console.log('     mileage: ', this.mileage.toString());
-    // console.log('     claimType: ', this.claimType.getString());
-    // console.log('     blockNumber: ', this.blockNumber.toString());
-    // console.log('     createdDate: ', this.createdDate.toUTCString());
-    // console.log('     previousBlockHash: ', this.previousBlockHash);
-    // console.log(combined);
-    // console.log(digest);
-    // console.log(digest.toString());
-    // console.log('---- END Hash calculation ------');
+    let digest = await Hashing.ComputeHashSHA256(combined);
     return digest.toString();
   }
 
   public async setCurrentBlockHash(parent: Block | undefined) {
     if (parent !== undefined) {
-      // console.log('ALGO: ', parent);
       this.previousBlockHash = parent.getBlockHash();
       parent.setNextBlock(this);
     } else {
       // Previous block is the Genesis block
       this.previousBlockHash = undefined;
     }
-    let hash: string = await this.calculateBlockHash(this.previousBlockHash);
-    // console.log('CALCULATE BLOCK HASH: ', hash);
-    this.blockHash = hash;
+    // Build merkle tree
+    await this.buildMerkleTree();
+
+    // Set block hash
+    this.blockHash = await this.calculateBlockHash(this.previousBlockHash);
+  }
+
+  private async buildMerkleTree() {
+    // Reset leaves of Merkle Tree instance inseide wrapper
+    this.merkleTree.resetLeaves();
+    // Append calculated hashes for all transaction in merkle tree wrapper
+    for (let i = 0; i < this.transactions.length; i++) {
+      let tx: Transaction = this.transactions[i];
+      // console.log('TO APPEND TX: ', await tx.calculateTransactionHash());
+      this.merkleTree.appendLeaf(await tx.calculateTransactionHash());
+    }
+    // console.log('WILL INIT MT: ', this.merkleTree.getTree());
+    // This will create a new instance of MerkleTree inside the MerkleTreeWrapper with the appended hashes
+    this.merkleTree.initializeWithSHA256();
   }
 
   public async isValidChain(prevBlockHash: string | undefined, verbose: boolean): Promise<boolean> {
     let isValid: boolean = true;
 
+    // Need to update the Hashes in the Merkle Tree.
+    await this.buildMerkleTree();
+
     // Is this a valid block and transaction
     let newBlockHash: string = await this.calculateBlockHash(prevBlockHash);
-    // console.log('------');
-    // console.log('PASSED PREV HASH ON ISVALID: ', prevBlockHash);
-    // console.log('BLOCK PREV HASH ON ISVALID: ', this.previousBlockHash);
-    // console.log('NEW HASH ON ISVALID: ', newBlockHash);
-    // console.log('CURRENT HASH ON ISVALID: ', this.getBlockHash());
+    console.log('------');
+    console.log('PASSED PREV HASH ON ISVALID: ', prevBlockHash);
+    console.log('BLOCK PREV HASH ON ISVALID: ', this.previousBlockHash);
+    console.log('NEW HASH ON ISVALID: ', newBlockHash);
+    console.log('CURRENT HASH ON ISVALID: ', this.getBlockHash());
+    console.log('MERKLE TREE ROOT HASH: ', this.merkleTree.getRoot());
     if (newBlockHash !== this.getBlockHash()) {
       isValid = false;
     } else {
@@ -128,42 +115,8 @@ class Block {
    * Getters and setter
    *
    **/
-
-  public getClaimNumber(): string | undefined {
-    return this.claimNumber;
-  }
-  public setClaimNumber(value: string) {
-    this.claimNumber = value;
-  }
-  public getSettlementAmount(): number | undefined {
-    return this.settlementAmount;
-  }
-  public setSettlementAmount(value: number) {
-    this.settlementAmount = value;
-  }
-  public getSettlementDate(): Date | undefined {
-    return this.settlementDate;
-  }
-  public setSettlementDate(value: Date) {
-    this.settlementDate = value;
-  }
-  public getCarRegistration(): string | undefined {
-    return this.carRegistration;
-  }
-  public setCarRegistration(value: string) {
-    this.carRegistration = value;
-  }
-  public getMileage(): number | undefined {
-    return this.mileage;
-  }
-  public setMileage(value: number) {
-    this.mileage = value;
-  }
-  public getClaimType(): ClaimType | undefined {
-    return this.claimType;
-  }
-  public setClaimType(value: ClaimType) {
-    this.claimType = value;
+  public getTransactions(): Transaction[] {
+    return this.transactions;
   }
   public getBlockNumber(): number | undefined {
     return this.blockNumber;
