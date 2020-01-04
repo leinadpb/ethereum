@@ -1,6 +1,8 @@
 import Hashing from '../helpers/Hashing';
 import Transaction from './Transaction';
 import MerkleTreeWrapper from '../common/merkle_tree/MerkleTree';
+import KeyStore from './KeyStore';
+import Hmac from '../helpers/Hmac';
 
 class Block {
   // Transactions of this block
@@ -13,20 +15,28 @@ class Block {
   private previousBlockHash?: string;
   private nextBlock?: Block;
   private merkleTree: MerkleTreeWrapper;
+  private blockSignature?: string;
+  private keyStore?: KeyStore;
 
   // internals
   private parent?: Block;
 
-  constructor(blockNumber: number) {
+  constructor(blockNumber: number, keySore?: KeyStore) {
     this.blockNumber = blockNumber;
     this.createdDate = new Date();
     this.transactions = [];
     this.merkleTree = new MerkleTreeWrapper();
+
+    if (keySore !== undefined) {
+      this.keyStore = keySore;
+    }
   }
 
   // Instance methods
-  public addTransaction(trans: Transaction) {
-    this.transactions.push(trans);
+  public addTransaction(trans: Transaction | undefined) {
+    if (trans !== undefined) {
+      this.transactions.push(trans);
+    }
   }
   public async initializeBlock() {
     await this.setCurrentBlockHash(this.parent);
@@ -34,9 +44,15 @@ class Block {
   public async calculateBlockHash(prevBlockHash: string | undefined): Promise<string> {
     let blockHeader: string = this.blockNumber.toString() + this.createdDate.toUTCString() + (prevBlockHash !== undefined ? prevBlockHash : '');
     let combined: string = this.merkleTree.getRoot() + blockHeader;
-    // Hash combined value and return it as base64 string
-    let digest = await Hashing.ComputeHashSHA256(combined);
-    return digest.toString();
+    let digest: string = '';
+
+    if (this.keyStore === undefined) {
+      digest = (await Hashing.ComputeHashSHA256(combined)).toString();
+    } else {
+      digest = (await Hmac.ComputeHmacSHA256(combined, this.keyStore.getAuthenticatedHashKey())).toString();
+    }
+
+    return digest;
   }
 
   public async setCurrentBlockHash(parent: Block | undefined) {
@@ -52,6 +68,10 @@ class Block {
 
     // Set block hash
     this.blockHash = await this.calculateBlockHash(this.previousBlockHash);
+
+    if (this.keyStore !== undefined) {
+      this.blockSignature = this.keyStore.signBlock(this.blockHash);
+    }
   }
 
   private async buildMerkleTree() {
@@ -70,9 +90,14 @@ class Block {
 
   public async isValidChain(prevBlockHash: string | undefined, verbose: boolean): Promise<boolean> {
     let isValid: boolean = true;
+    let validSignature: boolean = false;
 
     // Need to update the Hashes in the Merkle Tree.
     await this.buildMerkleTree();
+
+    if (this.keyStore !== undefined && this.blockHash !== undefined && this.blockSignature) {
+      validSignature = this.keyStore?.verifyBlock(this.blockHash, this.blockSignature);
+    }
 
     // Is this a valid block and transaction
     let newBlockHash: string = await this.calculateBlockHash(prevBlockHash);
@@ -89,7 +114,7 @@ class Block {
       isValid = this.previousBlockHash === prevBlockHash;
     }
 
-    this.printVerificationMessage(verbose, isValid);
+    this.printVerificationMessage(verbose, isValid, validSignature);
     // console.log('------');
 
     // Check the next block by passing in our newly calculated blockhash. This will be compared to
@@ -101,12 +126,17 @@ class Block {
     return isValid;
   }
 
-  private printVerificationMessage(verbose: boolean, isValid: boolean) {
+  private printVerificationMessage(verbose: boolean, isValid: boolean, validSignature: boolean) {
     if (verbose) {
       if (isValid) {
         console.log('Block Number ', this.blockNumber, ' : PASS VERIFICATION');
       } else {
         console.log('Block Number ', this.blockNumber, ' : FAILED VERIFICATION');
+        if (validSignature) {
+          console.log('Block Number ', this.blockNumber, ' : PASS DIGITAL SIGNATURE');
+        } else {
+          console.log('Block Number ', this.blockNumber, ' : FAILED DIGITAL SIGNATURE');
+        }
       }
     }
   }
@@ -147,6 +177,12 @@ class Block {
   }
   public setNextBlock(value: Block) {
     this.nextBlock = value;
+  }
+  public getBlockSignature(): string | undefined {
+    return this.blockSignature;
+  }
+  public getKeyStore(): KeyStore | undefined {
+    return this.keyStore;
   }
 }
 

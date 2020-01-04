@@ -14,16 +14,22 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const Hashing_1 = __importDefault(require("../helpers/Hashing"));
 const MerkleTree_1 = __importDefault(require("../common/merkle_tree/MerkleTree"));
+const Hmac_1 = __importDefault(require("../helpers/Hmac"));
 class Block {
-    constructor(blockNumber) {
+    constructor(blockNumber, keySore) {
         this.blockNumber = blockNumber;
         this.createdDate = new Date();
         this.transactions = [];
         this.merkleTree = new MerkleTree_1.default();
+        if (keySore !== undefined) {
+            this.keyStore = keySore;
+        }
     }
     // Instance methods
     addTransaction(trans) {
-        this.transactions.push(trans);
+        if (trans !== undefined) {
+            this.transactions.push(trans);
+        }
     }
     initializeBlock() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -34,9 +40,14 @@ class Block {
         return __awaiter(this, void 0, void 0, function* () {
             let blockHeader = this.blockNumber.toString() + this.createdDate.toUTCString() + (prevBlockHash !== undefined ? prevBlockHash : '');
             let combined = this.merkleTree.getRoot() + blockHeader;
-            // Hash combined value and return it as base64 string
-            let digest = yield Hashing_1.default.ComputeHashSHA256(combined);
-            return digest.toString();
+            let digest = '';
+            if (this.keyStore === undefined) {
+                digest = (yield Hashing_1.default.ComputeHashSHA256(combined)).toString();
+            }
+            else {
+                digest = (yield Hmac_1.default.ComputeHmacSHA256(combined, this.keyStore.getAuthenticatedHashKey())).toString();
+            }
+            return digest;
         });
     }
     setCurrentBlockHash(parent) {
@@ -53,6 +64,9 @@ class Block {
             yield this.buildMerkleTree();
             // Set block hash
             this.blockHash = yield this.calculateBlockHash(this.previousBlockHash);
+            if (this.keyStore !== undefined) {
+                this.blockSignature = this.keyStore.signBlock(this.blockHash);
+            }
         });
     }
     buildMerkleTree() {
@@ -71,18 +85,23 @@ class Block {
         });
     }
     isValidChain(prevBlockHash, verbose) {
+        var _a;
         return __awaiter(this, void 0, void 0, function* () {
             let isValid = true;
+            let validSignature = false;
             // Need to update the Hashes in the Merkle Tree.
             yield this.buildMerkleTree();
+            if (this.keyStore !== undefined && this.blockHash !== undefined && this.blockSignature) {
+                validSignature = (_a = this.keyStore) === null || _a === void 0 ? void 0 : _a.verifyBlock(this.blockHash, this.blockSignature);
+            }
             // Is this a valid block and transaction
             let newBlockHash = yield this.calculateBlockHash(prevBlockHash);
-            console.log('------');
-            console.log('PASSED PREV HASH ON ISVALID: ', prevBlockHash);
-            console.log('BLOCK PREV HASH ON ISVALID: ', this.previousBlockHash);
-            console.log('NEW HASH ON ISVALID: ', newBlockHash);
-            console.log('CURRENT HASH ON ISVALID: ', this.getBlockHash());
-            console.log('MERKLE TREE ROOT HASH: ', this.merkleTree.getRoot());
+            // console.log('------');
+            // console.log('PASSED PREV HASH ON ISVALID: ', prevBlockHash);
+            // console.log('BLOCK PREV HASH ON ISVALID: ', this.previousBlockHash);
+            // console.log('NEW HASH ON ISVALID: ', newBlockHash);
+            // console.log('CURRENT HASH ON ISVALID: ', this.getBlockHash());
+            // console.log('MERKLE TREE ROOT HASH: ', this.merkleTree.getRoot());
             if (newBlockHash !== this.getBlockHash()) {
                 isValid = false;
             }
@@ -90,7 +109,7 @@ class Block {
                 // Does the previous block hash match the latest previous block hash
                 isValid = this.previousBlockHash === prevBlockHash;
             }
-            this.printVerificationMessage(verbose, isValid);
+            this.printVerificationMessage(verbose, isValid, validSignature);
             // console.log('------');
             // Check the next block by passing in our newly calculated blockhash. This will be compared to
             // hash in the next block. They should match for the chain to be valid.
@@ -100,13 +119,19 @@ class Block {
             return isValid;
         });
     }
-    printVerificationMessage(verbose, isValid) {
+    printVerificationMessage(verbose, isValid, validSignature) {
         if (verbose) {
             if (isValid) {
                 console.log('Block Number ', this.blockNumber, ' : PASS VERIFICATION');
             }
             else {
                 console.log('Block Number ', this.blockNumber, ' : FAILED VERIFICATION');
+                if (validSignature) {
+                    console.log('Block Number ', this.blockNumber, ' : PASS DIGITAL SIGNATURE');
+                }
+                else {
+                    console.log('Block Number ', this.blockNumber, ' : FAILED DIGITAL SIGNATURE');
+                }
             }
         }
     }
@@ -146,6 +171,12 @@ class Block {
     }
     setNextBlock(value) {
         this.nextBlock = value;
+    }
+    getBlockSignature() {
+        return this.blockSignature;
+    }
+    getKeyStore() {
+        return this.keyStore;
     }
 }
 exports.default = Block;
