@@ -17,6 +17,7 @@ class BlockService {
   };
 
   private setUpTransactions(): Transaction {
+    this.txPool = new TransactionPool();
     let tx1: Transaction = new Transaction('ABC123', 1000.0, new Date(), 'QWE123', 1000, ClaimType.TotalLoss());
     let tx2: Transaction = new Transaction('VBG345', 1200.0, new Date(), 'ASD456', 2000, ClaimType.TotalLoss());
     let tx3: Transaction = new Transaction('XCF234', 3009.0, new Date(), 'GGF777', 3000, ClaimType.TotalLoss());
@@ -50,12 +51,12 @@ class BlockService {
     // Using on memory, in real life, you may want to persist it somewhere.
     let authKey: string = Hmac.GenerateKey();
     let keySotore: KeyStore = new KeyStore(authKey);
-    console.log('Key store: ', keySotore);
+    // console.log('Key store: ', keySotore);
 
-    let block1: Block = new Block(0, keySotore);
-    let block2: Block = new Block(1, keySotore);
-    let block3: Block = new Block(2, keySotore);
-    let block4: Block = new Block(3, keySotore);
+    let block1: Block = new Block(0, 3, keySotore);
+    let block2: Block = new Block(1, 3, keySotore);
+    let block3: Block = new Block(2, 3, keySotore);
+    let block4: Block = new Block(3, 3, keySotore);
 
     await this.addTransactionsToBlocksAndCalculateHashes(block1, block2, block3, block4);
 

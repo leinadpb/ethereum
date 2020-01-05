@@ -29,11 +29,11 @@ class BlockService {
             // Using on memory, in real life, you may want to persist it somewhere.
             let authKey = Hmac_1.default.GenerateKey();
             let keySotore = new KeyStore_1.default(authKey);
-            console.log('Key store: ', keySotore);
-            let block1 = new block_1.default(0, keySotore);
-            let block2 = new block_1.default(1, keySotore);
-            let block3 = new block_1.default(2, keySotore);
-            let block4 = new block_1.default(3, keySotore);
+            // console.log('Key store: ', keySotore);
+            let block1 = new block_1.default(0, 3, keySotore);
+            let block2 = new block_1.default(1, 3, keySotore);
+            let block3 = new block_1.default(2, 3, keySotore);
+            let block4 = new block_1.default(3, 3, keySotore);
             yield this.addTransactionsToBlocksAndCalculateHashes(block1, block2, block3, block4);
             let chain = new blockchain_1.default();
             chain.acceptBlock(block1);
@@ -51,6 +51,7 @@ class BlockService {
         this.txPool = new TransactionPool_1.default();
     }
     setUpTransactions() {
+        this.txPool = new TransactionPool_1.default();
         let tx1 = new Transaction_1.default('ABC123', 1000.0, new Date(), 'QWE123', 1000, claim_type_1.default.TotalLoss());
         let tx2 = new Transaction_1.default('VBG345', 1200.0, new Date(), 'ASD456', 2000, claim_type_1.default.TotalLoss());
         let tx3 = new Transaction_1.default('XCF234', 3009.0, new Date(), 'GGF777', 3000, claim_type_1.default.TotalLoss());

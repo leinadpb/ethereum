@@ -3,7 +3,7 @@ import Transaction from './Transaction';
 import MerkleTreeWrapper from '../common/merkle_tree/MerkleTree';
 import KeyStore from './KeyStore';
 import Hmac from '../helpers/Hmac';
-
+import { performance } from 'perf_hooks';
 class Block {
   // Transactions of this block
   private transactions: Transaction[];
@@ -17,30 +17,59 @@ class Block {
   private merkleTree: MerkleTreeWrapper;
   private blockSignature?: string;
   private keyStore?: KeyStore;
+  private difficulty: number;
+  private nonce: number;
 
   // internals
   private parent?: Block;
 
-  constructor(blockNumber: number, keySore?: KeyStore) {
+  constructor(blockNumber: number, miningDifficulty: number, keySore?: KeyStore) {
     this.blockNumber = blockNumber;
     this.createdDate = new Date();
     this.transactions = [];
     this.merkleTree = new MerkleTreeWrapper();
-
+    this.difficulty = miningDifficulty;
+    this.nonce = 0;
     if (keySore !== undefined) {
       this.keyStore = keySore;
     }
   }
 
   // Instance methods
+  public calculateProofOfWork = async (blockHash: string, _verbose?: boolean): Promise<string> => {
+    let difficultyStr: string = this.getDifficultyZeroString();
+
+    let startExecutionTime: number = performance.now();
+    let finishExecutionTime: number;
+    let executionTime: number;
+    while (true) {
+      let hashedData: string = await Hashing.ComputeHashSHA256(`${this.nonce} ${blockHash}`);
+
+      if (hashedData.startsWith(difficultyStr, 0)) {
+        finishExecutionTime = performance.now();
+        executionTime = finishExecutionTime - startExecutionTime; // ms
+        if (_verbose) {
+          console.log(`Difficulty level: ${this.difficulty} - Nonce: ${this.nonce} - Elapsed Time: ${executionTime} milliseconds.`);
+          console.log(hashedData);
+          console.log('\n');
+        }
+        return hashedData;
+      }
+
+      this.nonce = this.nonce + 1;
+    }
+  };
+
   public addTransaction(trans: Transaction | undefined) {
     if (trans !== undefined) {
       this.transactions.push(trans);
     }
   }
+
   public async initializeBlock() {
     await this.setCurrentBlockHash(this.parent);
   }
+
   public async calculateBlockHash(prevBlockHash: string | undefined): Promise<string> {
     let blockHeader: string = this.blockNumber.toString() + this.createdDate.toUTCString() + (prevBlockHash !== undefined ? prevBlockHash : '');
     let combined: string = this.merkleTree.getRoot() + blockHeader;
@@ -67,7 +96,7 @@ class Block {
     await this.buildMerkleTree();
 
     // Set block hash
-    this.blockHash = await this.calculateBlockHash(this.previousBlockHash);
+    this.blockHash = await this.calculateProofOfWork(await this.calculateBlockHash(this.previousBlockHash));
 
     if (this.keyStore !== undefined) {
       this.blockSignature = this.keyStore.signBlock(this.blockHash);
@@ -100,7 +129,7 @@ class Block {
     }
 
     // Is this a valid block and transaction
-    let newBlockHash: string = await this.calculateBlockHash(prevBlockHash);
+    let newBlockHash: string = await this.calculateProofOfWork(await this.calculateBlockHash(prevBlockHash), true);
     // console.log('------');
     // console.log('PASSED PREV HASH ON ISVALID: ', prevBlockHash);
     // console.log('BLOCK PREV HASH ON ISVALID: ', this.previousBlockHash);
@@ -139,6 +168,16 @@ class Block {
         }
       }
     }
+  }
+
+  private getDifficultyZeroString(): string {
+    let str: string = '';
+    let counter: number = this.difficulty;
+    while (counter > 0) {
+      str = str + '0';
+      counter--;
+    }
+    return str;
   }
 
   /**

@@ -15,17 +15,40 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const Hashing_1 = __importDefault(require("../helpers/Hashing"));
 const MerkleTree_1 = __importDefault(require("../common/merkle_tree/MerkleTree"));
 const Hmac_1 = __importDefault(require("../helpers/Hmac"));
+const perf_hooks_1 = require("perf_hooks");
 class Block {
-    constructor(blockNumber, keySore) {
+    constructor(blockNumber, miningDifficulty, keySore) {
+        // Instance methods
+        this.calculateProofOfWork = (blockHash, _verbose) => __awaiter(this, void 0, void 0, function* () {
+            let difficultyStr = this.getDifficultyZeroString();
+            let startExecutionTime = perf_hooks_1.performance.now();
+            let finishExecutionTime;
+            let executionTime;
+            while (true) {
+                let hashedData = yield Hashing_1.default.ComputeHashSHA256(`${this.nonce} ${blockHash}`);
+                if (hashedData.startsWith(difficultyStr, 0)) {
+                    finishExecutionTime = perf_hooks_1.performance.now();
+                    executionTime = finishExecutionTime - startExecutionTime; // ms
+                    if (_verbose) {
+                        console.log(`Difficulty level: ${this.difficulty} - Nonce: ${this.nonce} - Elapsed Time: ${executionTime} milliseconds.`);
+                        console.log(hashedData);
+                        console.log('\n');
+                    }
+                    return hashedData;
+                }
+                this.nonce = this.nonce + 1;
+            }
+        });
         this.blockNumber = blockNumber;
         this.createdDate = new Date();
         this.transactions = [];
         this.merkleTree = new MerkleTree_1.default();
+        this.difficulty = miningDifficulty;
+        this.nonce = 0;
         if (keySore !== undefined) {
             this.keyStore = keySore;
         }
     }
-    // Instance methods
     addTransaction(trans) {
         if (trans !== undefined) {
             this.transactions.push(trans);
@@ -63,7 +86,7 @@ class Block {
             // Build merkle tree
             yield this.buildMerkleTree();
             // Set block hash
-            this.blockHash = yield this.calculateBlockHash(this.previousBlockHash);
+            this.blockHash = yield this.calculateProofOfWork(yield this.calculateBlockHash(this.previousBlockHash));
             if (this.keyStore !== undefined) {
                 this.blockSignature = this.keyStore.signBlock(this.blockHash);
             }
@@ -95,7 +118,7 @@ class Block {
                 validSignature = (_a = this.keyStore) === null || _a === void 0 ? void 0 : _a.verifyBlock(this.blockHash, this.blockSignature);
             }
             // Is this a valid block and transaction
-            let newBlockHash = yield this.calculateBlockHash(prevBlockHash);
+            let newBlockHash = yield this.calculateProofOfWork(yield this.calculateBlockHash(prevBlockHash), true);
             // console.log('------');
             // console.log('PASSED PREV HASH ON ISVALID: ', prevBlockHash);
             // console.log('BLOCK PREV HASH ON ISVALID: ', this.previousBlockHash);
@@ -134,6 +157,15 @@ class Block {
                 }
             }
         }
+    }
+    getDifficultyZeroString() {
+        let str = '';
+        let counter = this.difficulty;
+        while (counter > 0) {
+            str = str + '0';
+            counter--;
+        }
+        return str;
     }
     /**
      * Getters and setter

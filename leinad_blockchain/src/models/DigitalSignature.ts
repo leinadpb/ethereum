@@ -28,8 +28,8 @@ class DigitalSignature {
     signer.write(data);
     signer.end();
 
-    console.log('SIGN DATA :: DigitalSignature :: signer', signer);
-    console.log('SIGN DATA :: DigitalSignature :: privateKey', privateKey);
+    // console.log('SIGN DATA :: DigitalSignature :: signer', signer);
+    // console.log('SIGN DATA :: DigitalSignature :: privateKey', privateKey);
 
     // Returns the signature in output_format which can be 'binary', 'hex' or 'base64'
     const signature = signer.sign(privateKey, 'base64');
